@@ -1,17 +1,12 @@
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useEffect } from "react";
+import { createFileRoute, redirect } from "@tanstack/react-router";
 import { newThreadId } from "@/lib/chat-storage";
 
 export const Route = createFileRoute("/_chat/")({
-  ssr: false,
-  component: NewChatRedirect,
+  beforeLoad: () => {
+    throw redirect({
+      to: "/c/$threadId",
+      params: { threadId: newThreadId() },
+      replace: true,
+    });
+  },
 });
-
-function NewChatRedirect() {
-  const navigate = useNavigate();
-  useEffect(() => {
-    const id = newThreadId();
-    navigate({ to: "/c/$threadId", params: { threadId: id }, replace: true });
-  }, [navigate]);
-  return null;
-}
