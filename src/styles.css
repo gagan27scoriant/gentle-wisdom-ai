@@ -97,8 +97,8 @@
   --sidebar-accent-foreground: oklch(0.20 0.02 60);
   --sidebar-border: oklch(0.90 0.014 75);
   --sidebar-ring: oklch(0.66 0.18 35);
-  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
-  --font-display: "Instrument Serif", ui-serif, Georgia, serif;
+  --font-sans: "Syne", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Syne", ui-sans-serif, system-ui, sans-serif;
 }
 
 .dark {

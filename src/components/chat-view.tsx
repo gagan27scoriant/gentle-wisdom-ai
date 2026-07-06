@@ -12,15 +12,22 @@ import {
   Plane,
   PenLine,
   GraduationCap,
+  Plus,
+  Mic,
+  X,
+  Paperclip,
 } from "lucide-react";
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import {
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import ReactMarkdown from "react-markdown";
 import { cn } from "@/lib/utils";
-import {
-  deriveTitle,
-  getThread,
-  upsertThread,
-} from "@/lib/chat-storage";
+import { deriveTitle, getThread, upsertThread } from "@/lib/chat-storage";
 
 type Props = { threadId: string };
 
@@ -58,8 +65,14 @@ const SUGGESTIONS: { title: string; prompt: string; icon: ReactNode }[] = [
 ];
 
 export function ChatView({ threadId }: Props) {
-  const initial = useMemo(() => getThread(threadId)?.messages ?? [], [threadId]);
-  const transport = useMemo(() => new DefaultChatTransport({ api: "/api/chat" }), []);
+  const initial = useMemo(
+    () => getThread(threadId)?.messages ?? [],
+    [threadId]
+  );
+  const transport = useMemo(
+    () => new DefaultChatTransport({ api: "/api/chat" }),
+    []
+  );
   const { messages, sendMessage, status, error, stop } = useChat({
     id: threadId,
     messages: initial as UIMessage[],
@@ -67,8 +80,24 @@ export function ChatView({ threadId }: Props) {
   });
 
   const [input, setInput] = useState("");
+  const [files, setFiles] = useState<File[]>([]);
+  const [recording, setRecording] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
+
+  function handleFiles(selected: FileList | null) {
+    if (!selected) return;
+    setFiles((prev) => [...prev, ...Array.from(selected)]);
+  }
+
+  function removeFile(idx: number) {
+    setFiles((prev) => prev.filter((_, i) => i !== idx));
+  }
+
+  function toggleMic() {
+    setRecording((r) => !r);
+  }
 
   // persist to localStorage whenever messages settle
   useEffect(() => {
@@ -94,12 +123,21 @@ export function ChatView({ threadId }: Props) {
     textareaRef.current?.focus();
   }, [threadId, status]);
 
+  // auto-resize textarea
+  function autoResize(el: HTMLTextAreaElement) {
+    el.style.height = "auto";
+    el.style.height = Math.min(el.scrollHeight, 200) + "px";
+  }
+
   const busy = status === "submitted" || status === "streaming";
 
   function submit(text?: string) {
     const value = (text ?? input).trim();
     if (!value || busy) return;
     setInput("");
+    if (textareaRef.current) {
+      textareaRef.current.style.height = "auto";
+    }
     sendMessage({ text: value });
   }
 
@@ -111,71 +149,189 @@ export function ChatView({ threadId }: Props) {
         e.preventDefault();
         submit();
       }}
-      className="group relative flex items-end gap-2 rounded-3xl border border-border bg-card p-2 pl-4 shadow-sm focus-within:border-primary/50 focus-within:shadow-md transition"
+      className="relative flex flex-col rounded-2xl border border-border bg-card shadow-md transition focus-within:border-primary/40 focus-within:shadow-lg"
     >
-      <textarea
-        ref={textareaRef}
-        value={input}
-        onChange={(e) => setInput(e.target.value)}
-        onKeyDown={(e) => {
-          if (e.key === "Enter" && !e.shiftKey) {
-            e.preventDefault();
-            submit();
-          }
-        }}
-        rows={1}
-        placeholder="Ask sarva anything…"
-        className="min-h-[36px] max-h-52 flex-1 resize-none bg-transparent py-2 text-[15px] leading-6 outline-none placeholder:text-muted-foreground/70"
-        onInput={(e) => {
-          const ta = e.currentTarget;
-          ta.style.height = "auto";
-          ta.style.height = Math.min(ta.scrollHeight, 208) + "px";
-        }}
+      {/* Hidden file input */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        multiple
+        className="hidden"
+        onChange={(e) => handleFiles(e.target.files)}
       />
-      {busy ? (
-        <button
-          type="button"
-          onClick={() => stop()}
-          aria-label="Stop generating"
-          className="flex h-9 w-9 items-center justify-center rounded-full bg-foreground text-background transition hover:opacity-90"
-        >
-          <Square className="h-3.5 w-3.5 fill-current" />
-        </button>
-      ) : (
-        <button
-          type="submit"
-          disabled={!input.trim()}
-          aria-label="Send message"
-          className="flex h-9 w-9 items-center justify-center rounded-full bg-primary text-primary-foreground transition enabled:hover:opacity-90 disabled:opacity-30"
-        >
-          <ArrowUp className="h-4 w-4" />
-        </button>
+
+      {/* File chips row — only shown when files are attached */}
+      {files.length > 0 && (
+        <div className="flex flex-wrap gap-2 px-4 pt-3">
+          {files.map((f, i) => (
+            <div
+              key={i}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-muted/60 px-2.5 py-1 text-xs text-foreground/80"
+            >
+              <Paperclip className="h-3 w-3 text-primary/70" />
+              <span className="max-w-[140px] truncate">{f.name}</span>
+              <button
+                type="button"
+                onClick={() => removeFile(i)}
+                className="ml-0.5 rounded-full p-0.5 hover:bg-destructive/10 hover:text-destructive transition"
+                aria-label="Remove file"
+              >
+                <X className="h-3 w-3" />
+              </button>
+            </div>
+          ))}
+        </div>
       )}
+
+      {/* Textarea row: [+] | textarea | [🎤] */}
+      <div className="flex items-start gap-1 px-3 pt-3">
+        {/* Attach button — left */}
+        <div className="relative group/btn shrink-0 mt-0.5">
+          <button
+            type="button"
+            aria-label="Attach file"
+            onClick={() => fileInputRef.current?.click()}
+            className="flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground hover:bg-accent hover:text-foreground transition"
+          >
+            <Plus className="h-4 w-4" />
+          </button>
+          <span className="pointer-events-none absolute bottom-full left-0 mb-1.5 whitespace-nowrap rounded-md bg-foreground px-2 py-1 text-[11px] text-background opacity-0 group-hover/btn:opacity-100 transition">
+            Attach file
+          </span>
+        </div>
+
+        {/* Textarea */}
+        <textarea
+          ref={textareaRef}
+          value={input}
+          onChange={(e) => {
+            setInput(e.target.value);
+            autoResize(e.target);
+          }}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && !e.shiftKey) {
+              e.preventDefault();
+              submit();
+            }
+          }}
+          rows={1}
+          placeholder={recording ? "Recording…" : "Message sarva…"}
+          className="min-h-[36px] max-h-[200px] flex-1 resize-none bg-transparent py-1.5 text-[15px] leading-relaxed outline-none placeholder:text-muted-foreground/60"
+        />
+
+        {/* Mic button — right */}
+        <div className="relative group/btn shrink-0 mt-0.5">
+          <button
+            type="button"
+            aria-label={recording ? "Stop recording" : "Voice input"}
+            onClick={toggleMic}
+            className={cn(
+              "flex h-8 w-8 items-center justify-center rounded-lg transition",
+              recording
+                ? "bg-primary/10 text-primary ring-2 ring-primary/30"
+                : "text-muted-foreground hover:bg-accent hover:text-foreground"
+            )}
+          >
+            {recording ? (
+              <span className="relative flex h-4 w-4 items-center justify-center">
+                <span className="absolute h-full w-full animate-ping rounded-full bg-primary/40" />
+                <Mic className="relative h-3.5 w-3.5 text-primary" />
+              </span>
+            ) : (
+              <Mic className="h-4 w-4" />
+            )}
+          </button>
+          <span className="pointer-events-none absolute bottom-full right-0 mb-1.5 whitespace-nowrap rounded-md bg-foreground px-2 py-1 text-[11px] text-background opacity-0 group-hover/btn:opacity-100 transition">
+            {recording ? "Stop recording" : "Voice input"}
+          </span>
+        </div>
+      </div>
+
+      {/* Bottom toolbar */}
+      <div className="flex items-center justify-between px-3 pb-3">
+        {/* Left: Gemini badge */}
+        <span className="inline-flex items-center gap-1.5 rounded-full border border-border bg-muted/60 px-2.5 py-1 text-[11px] font-medium text-muted-foreground">
+          <Sparkles className="h-2.5 w-2.5 text-primary" />
+          Powered by Gemini
+        </span>
+
+        {/* Right: Send / Stop */}
+        <div>
+          {busy ? (
+            <button
+              type="button"
+              onClick={() => stop()}
+              aria-label="Stop generating"
+              className="flex h-9 w-9 items-center justify-center rounded-full bg-foreground text-background shadow-sm transition hover:opacity-80"
+            >
+              <Square className="h-3.5 w-3.5 fill-current" />
+            </button>
+          ) : (
+            <button
+              type="submit"
+              disabled={!input.trim() && files.length === 0}
+              aria-label="Send message"
+              className="flex h-9 w-9 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-sm transition enabled:hover:opacity-90 disabled:opacity-25"
+            >
+              <ArrowUp className="h-4 w-4" />
+            </button>
+
+          )}
+        </div>
+      </div>
     </form>
   );
 
   return (
     <div className="flex h-dvh flex-col">
-      <header className="flex items-center justify-center border-b border-border/60 px-4 py-3">
-        <div className="flex items-center gap-2">
-          <Sparkles className="h-4 w-4 text-primary" />
-          <span className="font-display text-lg">sarva</span>
-          <span className="text-xs text-muted-foreground">· powered by Gemini</span>
-        </div>
-      </header>
 
       {empty ? (
+        /* ── LANDING PAGE ── */
         <div ref={scrollRef} className="flex-1 overflow-y-auto">
           <div className="mx-auto flex min-h-full w-full max-w-2xl flex-col items-center justify-center px-4 py-10">
-            <Greeting />
-            <div className="mt-8 w-full">{composer}</div>
-            <SuggestionRow onPick={(p) => submit(p)} />
-            <p className="mt-6 text-center text-[11px] text-muted-foreground">
-              sarva can make mistakes. Check important info.
+            {/* Hero greeting */}
+            <div className="flex flex-col items-center text-center mb-10">
+              {/* Glow orb */}
+              <div className="relative mb-6">
+                <div className="absolute inset-0 rounded-full bg-primary/30 blur-2xl scale-150 opacity-60" />
+                <div className="relative h-16 w-16 rounded-2xl bg-gradient-to-br from-primary/80 to-primary border border-primary/20 flex items-center justify-center shadow-lg shadow-primary/20">
+                  <Sparkles className="h-7 w-7 text-primary-foreground" />
+                </div>
+              </div>
+
+              <h1 className="font-display text-4xl md:text-5xl tracking-tight text-foreground">
+                <TimeGreeting />
+              </h1>
+              <p className="mt-3 text-base text-muted-foreground max-w-sm">
+                Your thoughtful AI companion for writing, coding, planning, and exploring ideas.
+              </p>
+            </div>
+
+            {/* Composer */}
+            <div className="w-full">{composer}</div>
+
+            {/* Suggestion pills */}
+            <div className="mt-6 flex w-full flex-wrap justify-center gap-2">
+              {SUGGESTIONS.map((s) => (
+                <button
+                  key={s.title}
+                  type="button"
+                  onClick={() => submit(s.prompt)}
+                  className="inline-flex items-center gap-1.5 rounded-full border border-border bg-card px-3.5 py-1.5 text-sm text-foreground/80 transition hover:border-primary/40 hover:bg-primary/5 hover:text-foreground"
+                >
+                  <span className="text-primary/80">{s.icon}</span>
+                  {s.title}
+                </button>
+              ))}
+            </div>
+
+            <p className="mt-6 text-center text-[11px] text-muted-foreground/70">
+              sarva can make mistakes. Verify important information.
             </p>
           </div>
         </div>
       ) : (
+        /* ── CHAT VIEW ── */
         <>
           <div ref={scrollRef} className="flex-1 overflow-y-auto">
             <div className="mx-auto w-full max-w-3xl px-4 py-6 md:py-10">
@@ -185,18 +341,20 @@ export function ChatView({ threadId }: Props) {
                 ))}
                 {status === "submitted" && <ThinkingIndicator />}
                 {error && (
-                  <li className="rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive">
+                  <li className="rounded-xl border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive">
                     {error.message || "Something went wrong."}
                   </li>
                 )}
               </ul>
             </div>
           </div>
-          <div className="border-t border-border/60 bg-background/80 backdrop-blur">
+
+          {/* Composer */}
+          <div className="border-t border-border/60 bg-background/80 backdrop-blur-md">
             <div className="mx-auto w-full max-w-3xl px-4 py-3 md:py-4">
               {composer}
-              <p className="mt-2 text-center text-[11px] text-muted-foreground">
-                sarva can make mistakes. Check important info.
+              <p className="mt-2 text-center text-[11px] text-muted-foreground/60">
+                sarva can make mistakes. Verify important information.
               </p>
             </div>
           </div>
@@ -206,7 +364,7 @@ export function ChatView({ threadId }: Props) {
   );
 }
 
-function Greeting() {
+function TimeGreeting() {
   const greeting = useMemo(() => {
     const h = new Date().getHours();
     if (h < 5) return "Still up?";
@@ -215,47 +373,22 @@ function Greeting() {
     if (h < 22) return "Good evening.";
     return "Working late?";
   }, []);
-  return (
-    <div className="flex flex-col items-center text-center">
-      <div className="h-12 w-12 rounded-full bg-primary/10 border border-primary/20 flex items-center justify-center">
-        <span className="font-display text-2xl text-primary leading-none">s</span>
-      </div>
-      <h1 className="mt-5 font-display text-4xl md:text-5xl tracking-tight text-foreground">
-        {greeting}
-      </h1>
-      <p className="mt-2 font-display text-2xl md:text-3xl italic text-muted-foreground/80">
-        What shall we make today?
-      </p>
-    </div>
-  );
-}
-
-function SuggestionRow({ onPick }: { onPick: (p: string) => void }) {
-  return (
-    <div className="mt-6 flex w-full flex-wrap justify-center gap-2">
-      {SUGGESTIONS.map((s) => (
-        <button
-          key={s.title}
-          type="button"
-          onClick={() => onPick(s.prompt)}
-          className="inline-flex items-center gap-1.5 rounded-full border border-border bg-card px-3.5 py-1.5 text-sm text-foreground/80 transition hover:border-primary/40 hover:bg-primary/5 hover:text-foreground"
-        >
-          <span className="text-primary/80">{s.icon}</span>
-          {s.title}
-        </button>
-      ))}
-    </div>
-  );
+  return <>{greeting}</>;
 }
 
 function ThinkingIndicator() {
   return (
-    <li className="flex items-center gap-2 text-sm text-muted-foreground">
-      <span className="relative flex h-2 w-2">
-        <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-primary opacity-60" />
-        <span className="relative inline-flex h-2 w-2 rounded-full bg-primary" />
-      </span>
-      Thinking…
+    <li className="flex items-center gap-3 text-sm text-muted-foreground pl-1">
+      <div className="flex gap-1">
+        {[0, 1, 2].map((i) => (
+          <span
+            key={i}
+            className="inline-block h-2 w-2 rounded-full bg-primary/60 animate-bounce"
+            style={{ animationDelay: `${i * 0.15}s` }}
+          />
+        ))}
+      </div>
+      <span>sarva is thinking…</span>
     </li>
   );
 }
@@ -270,7 +403,7 @@ function MessageBubble({ message }: { message: UIMessage }) {
   if (isUser) {
     return (
       <li className="flex justify-end">
-        <div className="max-w-[85%] whitespace-pre-wrap rounded-2xl rounded-tr-md bg-primary px-4 py-2.5 text-[15px] leading-relaxed text-primary-foreground shadow-sm">
+        <div className="max-w-[85%] whitespace-pre-wrap rounded-2xl rounded-tr-sm bg-primary px-4 py-3 text-[15px] leading-relaxed text-primary-foreground shadow-sm">
           {text}
         </div>
       </li>
@@ -278,8 +411,16 @@ function MessageBubble({ message }: { message: UIMessage }) {
   }
 
   return (
-    <li className="group flex flex-col gap-1.5">
-      <div className="prose prose-neutral max-w-none text-[15px] leading-relaxed text-foreground">
+    <li className="group flex flex-col gap-2">
+      {/* Avatar + name */}
+      <div className="flex items-center gap-2 mb-0.5">
+        <div className="h-6 w-6 rounded-md bg-primary/10 border border-primary/20 flex items-center justify-center">
+          <span className="font-display text-xs text-primary leading-none">s</span>
+        </div>
+        <span className="text-xs font-medium text-muted-foreground">sarva</span>
+      </div>
+
+      <div className="prose prose-neutral max-w-none text-[15px] leading-relaxed text-foreground pl-8">
         <ReactMarkdown
           components={{
             code({ className, children, ...props }) {
@@ -287,7 +428,7 @@ function MessageBubble({ message }: { message: UIMessage }) {
               if (!isBlock) {
                 return (
                   <code
-                    className="rounded bg-muted px-1.5 py-0.5 text-[0.9em] font-mono"
+                    className="rounded-md bg-muted px-1.5 py-0.5 text-[0.88em] font-mono"
                     {...props}
                   >
                     {children}
@@ -302,7 +443,7 @@ function MessageBubble({ message }: { message: UIMessage }) {
             },
             pre({ children }) {
               return (
-                <pre className="overflow-x-auto rounded-lg border border-border bg-muted/60 p-4 text-sm">
+                <pre className="overflow-x-auto rounded-xl border border-border bg-muted/60 p-4 text-sm">
                   {children}
                 </pre>
               );
@@ -313,7 +454,7 @@ function MessageBubble({ message }: { message: UIMessage }) {
                   href={href}
                   target="_blank"
                   rel="noreferrer"
-                  className="text-primary underline underline-offset-2 hover:opacity-80"
+                  className="text-primary underline underline-offset-2 hover:opacity-80 transition"
                 >
                   {children}
                 </a>
@@ -324,19 +465,24 @@ function MessageBubble({ message }: { message: UIMessage }) {
           {text}
         </ReactMarkdown>
       </div>
+
       {text && (
-        <div className="opacity-0 group-hover:opacity-100 transition">
+        <div className="pl-8 opacity-0 group-hover:opacity-100 transition">
           <button
             type="button"
             onClick={async () => {
               await navigator.clipboard.writeText(text);
               setCopied(true);
-              setTimeout(() => setCopied(false), 1200);
+              setTimeout(() => setCopied(false), 1500);
             }}
-            className="inline-flex items-center gap-1 rounded-md border border-border bg-card px-2 py-1 text-xs text-muted-foreground hover:text-foreground"
+            className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-card px-2.5 py-1 text-xs text-muted-foreground hover:text-foreground hover:border-border/80 transition"
           >
-            {copied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
-            {copied ? "Copied" : "Copy"}
+            {copied ? (
+              <Check className="h-3 w-3 text-primary" />
+            ) : (
+              <Copy className="h-3 w-3" />
+            )}
+            {copied ? "Copied!" : "Copy"}
           </button>
         </div>
       )}
