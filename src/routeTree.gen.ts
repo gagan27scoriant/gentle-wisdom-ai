@@ -9,8 +9,13 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as ChatRouteImport } from './routes/_chat'
 import { Route as ApiChatRouteImport } from './routes/api/chat'
 
+const ChatRoute = ChatRouteImport.update({
+  id: '/_chat',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiChatRoute = ApiChatRouteImport.update({
   id: '/api/chat',
   path: '/api/chat',
@@ -18,29 +23,40 @@ const ApiChatRoute = ApiChatRouteImport.update({
 } as any)
 
 export interface FileRoutesByFullPath {
+  '/': typeof ChatRoute
   '/api/chat': typeof ApiChatRoute
 }
 export interface FileRoutesByTo {
+  '/': typeof ChatRoute
   '/api/chat': typeof ApiChatRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
+  '/_chat': typeof ChatRoute
   '/api/chat': typeof ApiChatRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/api/chat'
+  fullPaths: '/' | '/api/chat'
   fileRoutesByTo: FileRoutesByTo
-  to: '/api/chat'
-  id: '__root__' | '/api/chat'
+  to: '/' | '/api/chat'
+  id: '__root__' | '/_chat' | '/api/chat'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
+  ChatRoute: typeof ChatRoute
   ApiChatRoute: typeof ApiChatRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/_chat': {
+      id: '/_chat'
+      path: ''
+      fullPath: '/'
+      preLoaderRoute: typeof ChatRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/chat': {
       id: '/api/chat'
       path: '/api/chat'
@@ -52,6 +68,7 @@ declare module '@tanstack/react-router' {
 }
 
 const rootRouteChildren: RootRouteChildren = {
+  ChatRoute: ChatRoute,
   ApiChatRoute: ApiChatRoute,
 }
 export const routeTree = rootRouteImport
